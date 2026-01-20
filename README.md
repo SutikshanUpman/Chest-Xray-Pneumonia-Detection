@@ -1,30 +1,43 @@
-# 🩺 Chest X-ray Pneumonia Detection 
+# 🩺 Chest X-ray Pneumonia Detection
 
-A deep learning project to detect **Pneumonia** from **Chest X-ray images** using **Convolutional Neural Networks (CNNs)**.
+A deep learning–based medical imaging project to detect **Pneumonia** from **Chest X-ray images** using **Convolutional Neural Networks (CNNs)**.
 
 ---
 
-## 📌 Project Overview
+## 📌 Overview
 
-Pneumonia is a serious lung infection that can be life-threatening if not diagnosed early.  
-This project applies **CNN-based deep learning models** to automatically classify chest X-ray images into:
+Pneumonia is a potentially life-threatening lung infection where **early detection is critical**.  
+This project builds an **end-to-end image classification pipeline** that classifies chest X-ray images into:
 
 - **NORMAL**
 - **PNEUMONIA**
 
-The objective is to build a reliable image classification pipeline that can assist in early medical screening.
+The project is designed for **educational and research purposes**, focusing on correct ML practices rather than just high accuracy.
+
+---
+
+## 🎯 Objectives
+
+- Understand and preprocess medical image data  
+- Build a **CNN from scratch** (no transfer learning in Version-1)  
+- Prioritize **Recall** to minimize missed pneumonia cases  
+- Perform evaluation and error analysis  
+- Maintain a clean, reproducible ML project structure  
 
 ---
 
 ## 📁 Project Structure
 
 ```
-.
-├── data/           # Dataset (ignored in git)
-├── notebooks/      # Experiments, EDA, and analysis
-├── src/            # Model training and evaluation code
-├── models/         # Saved trained models (ignored)
-├── reports/        # Metrics, plots, and results
+chest-xray-pneumonia-detection/
+│
+├── data/               # Dataset (excluded from git)
+├── notebooks/          # EDA, preprocessing, training, evaluation
+├── src/                # Reusable training & evaluation scripts
+├── models/             # Saved trained models (excluded)
+├── reports/            # Metrics, plots, confusion matrices
+├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
@@ -32,28 +45,26 @@ The objective is to build a reliable image classification pipeline that can assi
 
 ## 📊 Dataset
 
-The project uses the **Chest X-Ray Images (Pneumonia)** dataset, which contains labeled chest X-ray images.
+This project uses the **Chest X-Ray Images (Pneumonia)** dataset.
 
-### Dataset Classes
+### Classes
 - **NORMAL**
 - **PNEUMONIA**
 
-> ⚠️ Dataset is not included in this repository due to size constraints.
+⚠️ The dataset is **not included** in this repository due to size constraints.
 
 ---
 
-## 📥 How to Download the Dataset
+## 📥 Dataset Setup
 
-### Option 1: Download from Kaggle (Recommended)
+### Download from Kaggle (Recommended)
 
-1. Visit the dataset page:  
+1. Visit:  
    https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
 
-2. Click **Download**
+2. Download and extract the dataset
 
-3. Extract the downloaded ZIP file
-
-4. Place the dataset inside the `data/` directory as follows:
+3. Place it inside the `data/` directory as shown below:
 
 ```
 data/
@@ -61,10 +72,10 @@ data/
     ├── train/
     │   ├── NORMAL/
     │   └── PNEUMONIA/
-    ├── test/
+    ├── val/
     │   ├── NORMAL/
     │   └── PNEUMONIA/
-    └── val/
+    └── test/
         ├── NORMAL/
         └── PNEUMONIA/
 ```
@@ -76,16 +87,30 @@ data/
 - Python  
 - TensorFlow / Keras  
 - NumPy, Pandas  
-- Matplotlib, OpenCV  
+- Matplotlib  
+- OpenCV  
+
+---
+
+## 📈 Evaluation Metrics
+
+- Accuracy  
+- **Recall (PNEUMONIA)** — prioritized due to medical risk  
+- Confusion Matrix  
 
 ---
 
 ## 🚧 Project Status
 
-Work in progress 🚧  
+**Version-1 (CNN from scratch): In progress** 🚧  
+
+Planned future versions:
+- **Version-2:** Transfer learning + Grad-CAM explainability  
+- **Version-3:** Decision-support framing with risk scoring  
 
 ---
 
-## 📜 License
+## 📜 Disclaimer
 
-This project is for educational and research purposes.
+This project is intended **strictly for educational and research purposes**.  
+It should **not** be used for real-world medical diagnosis without professional validation.
