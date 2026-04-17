@@ -4,3 +4,6 @@ pandas
 matplotlib
 scikit-learn
 opencv-python
+Pillow
+autotime
+jupyterlab
