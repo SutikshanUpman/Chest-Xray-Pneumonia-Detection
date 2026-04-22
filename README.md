@@ -8,7 +8,7 @@ A deep learning–based medical imaging project to classify **Chest X-ray images
 
 Pneumonia is a potentially life-threatening lung infection where early detection is critical. This project builds an end-to-end image classification pipeline and systematically compares four strategies for handling class imbalance — a problem native to this dataset (~1:3 Normal-to-Pneumonia ratio in training).
 
-**Phase 1 (Complete) — CNN from scratch, no transfer learning.**
+**Phase 1 (Completed — CNN from scratch, no transfer learning.**
 
 ---
 
