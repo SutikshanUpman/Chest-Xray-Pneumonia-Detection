@@ -1,29 +1,30 @@
-# 🩺 Chest X-ray Pneumonia Detection
+# Chest X-ray Pneumonia Detection
 
-A deep learning–based medical imaging project to classify **Chest X-ray images** as **NORMAL** or **PNEUMONIA** using CNNs built from scratch. The project emphasizes correct ML practices, reproducibility, and honest evaluation over chasing raw accuracy.
+A deep learning–based medical imaging project to classify Chest X-ray images as NORMAL or PNEUMONIA using CNNs built from scratch. The project emphasizes correct ML practices, reproducibility, and honest evaluation over chasing raw accuracy.
 
 ---
 
-## 📌 Overview
+## Overview
 
 Pneumonia is a potentially life-threatening lung infection where early detection is critical. This project builds an end-to-end image classification pipeline and systematically compares four strategies for handling class imbalance — a problem native to this dataset (~1:3 Normal-to-Pneumonia ratio in training).
 
-**Phase 1 (Completed — CNN from scratch, no transfer learning.**
+**Phase 1 (Complete) — CNN from scratch, no transfer learning.**
+**Phase 2 (Planned) — Transfer learning + explainability.**
 
 ---
 
-## 🎯 Objectives
+## Objectives
 
 - Understand and preprocess real-world medical image data
 - Reconstruct a representative validation set from the original Kaggle data
 - Build CNNs from scratch without transfer learning
 - Systematically compare four class-imbalance handling strategies
-- Prioritize **Recall (Pneumonia)** to minimise missed diagnoses, while preserving **Normal recall** to avoid over-prediction
+- Prioritize Recall (Pneumonia) to minimise missed diagnoses, while preserving Normal recall to avoid over-prediction
 - Document findings honestly, including failure modes
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 chest-xray-pneumonia-detection/
@@ -62,7 +63,7 @@ chest-xray-pneumonia-detection/
 
 ---
 
-## 📊 Dataset
+## Dataset
 
 **Chest X-Ray Images (Pneumonia)** — Kaggle
 → https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
@@ -75,11 +76,11 @@ chest-xray-pneumonia-detection/
 | Val   | 150    | 403       |
 | Test  | 234    | 390       |
 
-> ⚠️ **Val set note:** The original Kaggle `val/` directory had only 16 images per class — too small for reliable callback signals (EarlyStopping, ReduceLROnPlateau). In `01_data_exploration.ipynb`, 10% of the training set was stratified-split and moved to `val/` before any model training. The class imbalance in val is intentional — it mirrors real-world distribution.
+> **Val set note:** The original Kaggle `val/` directory had only 16 images per class — too small for reliable callback signals (EarlyStopping, ReduceLROnPlateau). In `01_data_exploration.ipynb`, 10% of the training set was stratified-split and moved to `val/` before any model training. The class imbalance in val is intentional — it mirrors real-world distribution.
 
 ---
 
-## 📥 Dataset Setup
+## Dataset Setup
 
 Download from Kaggle and extract into:
 
@@ -96,7 +97,7 @@ Run `01_data_exploration.ipynb` first — it automatically reconstructs the val 
 
 ---
 
-## 🏗️ Phase 1 — Architecture
+## Phase 1 — Architecture
 
 ### Strategies 1 & 2 (Class Weights, Oversampling)
 A deeper 4-block CNN with Global Average Pooling:
@@ -133,7 +134,7 @@ Input (224×224×1 grayscale)
 
 ---
 
-## ⚖️ Imbalance Strategies Compared
+## Imbalance Strategies Compared
 
 ### Strategy 1 — Class Weights
 Adjusted class weights `{Normal: 1.6, Pneumonia: 0.8}` passed to `model.fit()`. All callbacks monitor `val_loss`. The weights were manually tuned down from the fully-balanced sklearn defaults (~1.95 / 0.67) to avoid over-correcting.
@@ -149,7 +150,7 @@ Identical training setup to Strategy 3 but with a hand-written `custom_stratifie
 
 ---
 
-## 📈 Phase 1 Results
+## Phase 1 Results
 
 All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). Classification threshold optimised per model by searching `[0.20, 0.80]` to maximise Pneumonia F1-score.
 
@@ -172,7 +173,7 @@ All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). 
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - Python 3.10
 - TensorFlow / Keras 2.20.0
@@ -183,9 +184,9 @@ All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). 
 
 ---
 
-## 🚀 Roadmap
+## Roadmap
 
-### ✅ Phase 1 — CNN from Scratch (Complete)
+### Phase 1 — CNN from Scratch (Complete)
 - [x] EDA + val set reconstruction from original Kaggle data
 - [x] Class Weights model (4-block CNN, GAP)
 - [x] Disk-level Oversampling model (4-block CNN, GAP)
@@ -193,11 +194,9 @@ All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). 
 - [x] K-Fold ensemble with custom stratified split implementation
 - [x] Unified evaluation: threshold search, classification report, confusion matrix, comparison table
 
----
+### Phase 2 (Final) — Transfer Learning + Explainability (Planned)
 
-### 🔜 Phase 2 — Transfer Learning + Explainability (Planned)
-
-**Goal:** Replace the scratch CNN backbone with a pretrained feature extractor and understand *what* the model is actually looking at.
+**Goal:** Replace the scratch CNN backbone with a pretrained feature extractor, understand what the model is actually looking at, and show a direct improvement over Phase 1 — without expanding scope beyond that.
 
 - [ ] Adapt a pretrained backbone (MobileNetV2 or EfficientNetB0) for single-channel X-ray input
 - [ ] Fine-tune with progressive unfreezing (freeze base → train head → unfreeze top blocks)
@@ -205,30 +204,10 @@ All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). 
 - [ ] Head-to-head comparison against Phase 1 metrics (same test set, same threshold search)
 - [ ] Refactor training logic into reusable `src/` scripts (`data_loader.py`, `model.py`, `train.py`, `evaluate.py`)
 
----
-
-### 🔮 Phase 3 — PyTorch + Vision Transformers (Planned)
-
-**Goal:** Reproduce the best Phase 2 result in PyTorch and explore attention-based architectures.
-
-- [ ] Port the dataset pipeline and evaluation loop to PyTorch / torchvision
-- [ ] Implement a Vision Transformer (ViT) for patch-based X-ray classification
-- [ ] Compare CNN vs. ViT on the same test set
-- [ ] Explore cross-architecture ensemble (CNN + ViT soft-vote)
+This phase is scoped deliberately: a pretrained backbone swap, Grad-CAM explainability, and a same-test-set comparison against Phase 1. Vision Transformers, cross-architecture ensembles, and the geospatial/satellite extension are considered out of scope for this project and are not planned.
 
 ---
 
-### 🌍 Phase 4 — Geospatial Land Classification (Planned)
+## Disclaimer
 
-**Goal:** Extend the capstone to a multi-class remote sensing task using satellite imagery.
-
-- [ ] Geospatial land-use / land-cover classification dataset (e.g. EuroSAT or UC Merced)
-- [ ] Adapt multi-channel (RGB + NIR) input pipelines
-- [ ] Apply transfer learning and compare with the medical imaging findings
-- [ ] Evaluate with macro F1 and per-class breakdowns across 10+ classes
-
----
-
-## 📜 Disclaimer
-
-This project is strictly for **educational and research purposes**. It must not be used for real-world medical diagnosis without rigorous clinical validation and regulatory approval.
+This project is strictly for educational and research purposes. It must not be used for real-world medical diagnosis without rigorous clinical validation and regulatory approval.
