@@ -1,0 +1,29 @@
+# Large datasets
+data/
+
+# Trained models
+models/
+*.h5
+*.keras
+*.pt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+
+# OS junk
+Thumbs.db
+
+# Web app (webapp/)
+webapp/storage/
+*.db
+node_modules/
+.next/
+webapp/**/.env
+CLAUDE.md

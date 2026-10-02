@@ -1,0 +1,11 @@
+# Model service, mock mode and tests (conda env "ai-web", Python 3.10, TF-free).
+# Versions are the ones installed in ai-web. TensorFlow is deliberately absent:
+# real-model mode (Stage 4) runs in "ai-cpu", which already has TensorFlow 2.20.
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pytest==9.1.1
+httpx==0.28.1
+pillow==12.3.0
+numpy==2.2.6
+opencv-python-headless==5.0.0.93
