@@ -27,3 +27,4 @@ node_modules/
 .next/
 webapp/**/.env
 CLAUDE.md
+*.tsbuildinfo
