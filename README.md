@@ -1,106 +1,270 @@
 # Chest X-ray Pneumonia Detection
 
-A deep learning–based medical imaging project to classify Chest X-ray images as NORMAL or PNEUMONIA using CNNs built from scratch. The project emphasizes correct ML practices, reproducibility, and honest evaluation over chasing raw accuracy.
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-2.20-FF6F00?logo=tensorflow&logoColor=white)
+![Keras](https://img.shields.io/badge/Keras-3.12-D00000?logo=keras&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.142-009688?logo=fastapi&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+
+I trained six models to classify chest X-rays as NORMAL or PNEUMONIA, evaluated them honestly on a held-out test set, and served them in a small local web app.
+
+**Jump to:** [TL;DR](#tldr) · [What and why](#what-and-why) · [Key findings](#key-findings) · [Struggles and lessons](#struggles-and-lessons) · [Results](#results) · [Demo web app](#demo-web-app) · [Limitations](#limitations) · [Reproduce it](#reproduce-it) · [Disclaimer](#disclaimer)
 
 ---
 
-## Overview
+## TL;DR
 
-Pneumonia is a potentially life-threatening lung infection where early detection is critical. This project builds an end-to-end image classification pipeline and systematically compares four strategies for handling class imbalance — a problem native to this dataset (~1:3 Normal-to-Pneumonia ratio in training).
-
-**Phase 1 (Complete) — CNN from scratch, no transfer learning.**
-**Phase 2 (Planned) — Transfer learning + explainability.**
-
----
-
-## Objectives
-
-- Understand and preprocess real-world medical image data
-- Reconstruct a representative validation set from the original Kaggle data
-- Build CNNs from scratch without transfer learning
-- Systematically compare four class-imbalance handling strategies
-- Prioritize Recall (Pneumonia) to minimise missed diagnoses, while preserving Normal recall to avoid over-prediction
-- Document findings honestly, including failure modes
+- **Best model:** a fine-tuned MobileNetV2 reaches **0.8622 test accuracy** (95% CI 0.8365–0.8878) and **0.9949 Pneumonia recall**: it missed 2 of 390 pneumonia X-rays.
+- **Honest weak spot:** every model over-calls pneumonia. **Normal recall is only 0.3077–0.6410** across the six models, so many healthy X-rays get flagged.
+- **Method:** each model's decision threshold is tuned on the validation set only; the test set is scored once at that fixed threshold. All numbers here come from [`results/comparison.csv`](results/comparison.csv) and [`results/comparison_ci.csv`](results/comparison_ci.csv).
+- **Web app:** upload an X-ray and compare all six models side by side, with Grad-CAM for the best one. See [Demo web app](#demo-web-app).
 
 ---
 
-## Project Structure
+## What and why
 
-```
-chest-xray-pneumonia-detection/
-│
-├── data/
-│   └── raw/
-│       ├── train/
-│       │   ├── NORMAL/
-│       │   └── PNEUMONIA/
-│       ├── val/
-│       │   ├── NORMAL/
-│       │   └── PNEUMONIA/
-│       └── test/
-│           ├── NORMAL/
-│           └── PNEUMONIA/
-│
-├── notebooks/
-│   ├── 01_data_exploration.ipynb              # EDA + val set reconstruction
-│   ├── 02_model_training_class_weights.ipynb  # Strategy 1 — weighted loss
-│   ├── 02_model_training_OverSample.ipynb     # Strategy 2 — disk-level oversampling
-│   ├── 02_model_training_k_fold.ipynb         # Strategy 3 — StratifiedKFold ensemble
-│   ├── 02_model_training_k_fold_custom.ipynb  # Strategy 4 — Custom KFold implementation
-│   └── 03_evaluation.ipynb                    # Unified evaluation & comparison table
-│
-├── src/                                       # (Phase 2) reusable scripts
-│   ├── model.py
-│   ├── train.py
-│   ├── evaluate.py
-│   └── data_loader.py
-│
-├── models/                                    # Saved .h5 files (excluded from git)
-├── requirements.txt
-├── .gitignore
-└── README.md
+This project classifies pediatric chest X-rays from the public Kaggle dataset as NORMAL or PNEUMONIA. Phase 1 is four CNN set-ups trained from scratch, each with a different way of handling class imbalance (two of them are three-model ensembles). Phase 2 is a pretrained MobileNetV2, first with a frozen backbone and then fine-tuned.
+
+Why I built it this way:
+
+- **Accuracy misleads on imbalanced data.** The training set is about 1 Normal to 3 Pneumonia, so a model that always says "pneumonia" already looks decent. I report Normal and Pneumonia recall separately, plus macro F1 and ROC-AUC.
+- **Honest evaluation matters more than a high number.** Thresholds are tuned on validation only, the test set is used once, and every metric has a bootstrap confidence interval.
+- **Missing pneumonia is the costly error.** A missed case is worse than a false alarm, so thresholds are tuned for Pneumonia F1. The flip side is the low Normal recall above, and I report it instead of hiding it.
+- **Serving a model is harder than training it.** The web app has to reproduce the evaluation preprocessing exactly, per model, or the tuned thresholds stop meaning anything.
+
+```mermaid
+flowchart LR
+    A["Kaggle chest X-rays"] --> B["01 data exploration: rebuild the validation set"]
+    B --> C["02 Phase 1: four CNNs from scratch"]
+    B --> D["02 Phase 2: MobileNetV2 (frozen and fine-tuned)"]
+    C --> E["03 evaluation: tune threshold on validation, score test once"]
+    D --> E
+    E --> F["results/comparison.csv and comparison_ci.csv"]
+    F --> G["Demo web app"]
+    C --> H["models/phase1 and models/phase2 (.h5)"]
+    D --> H
+    H --> G
 ```
 
 ---
 
-## Dataset
+## Key findings
 
-**Chest X-Ray Images (Pneumonia)** — Kaggle
-→ https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia
+Every number below is copied from `results/comparison.csv` / `results/comparison_ci.csv` or computed from them (the arithmetic is shown).
 
-### Class Distribution (after val reconstruction)
+**1. Fine-tuning a pretrained model beat every scratch CNN, and the gap is larger than the uncertainty.**
+Phase 2 fine-tuned has the highest test accuracy (0.8622), Normal recall (0.6410), macro F1 (0.8387) and ROC-AUC (0.9768) of the six models. Its accuracy 95% CI (0.8365–0.8878) does not overlap with any other model's; the closest is Phase 2 frozen (0.7644–0.8270), whose upper bound is 0.0095 below the fine-tuned lower bound. Against the best Phase 1 model (K-Fold custom ensemble, 0.7821) the accuracy gain is 0.8622 − 0.7821 = 0.0801.
 
-| Split | NORMAL | PNEUMONIA |
-|-------|--------|-----------|
-| Train | 1,199  | 3,480     |
-| Val   | 150    | 403       |
-| Test  | 234    | 390       |
+**2. The best model almost never misses pneumonia, but raises many false alarms.**
+Rebuilding its confusion matrix from recall × class size on the test set (234 Normal, 390 Pneumonia):
 
-> **Val set note:** The original Kaggle `val/` directory had only 16 images per class — too small for reliable callback signals (EarlyStopping, ReduceLROnPlateau). In `01_data_exploration.ipynb`, 10% of the training set was stratified-split and moved to `val/` before any model training. The class imbalance in val is intentional — it mirrors real-world distribution.
+| | Predicted NORMAL | Predicted PNEUMONIA |
+|---|:---:|:---:|
+| **Actually NORMAL** (234) | 150 = 234 × 0.6410 | 84 |
+| **Actually PNEUMONIA** (390) | 2 | 388 = 390 × 0.9949 |
 
----
+Cross-check: (150 + 388) / 624 = 0.8622, which is exactly the reported accuracy. The same matrix also reproduces the reported precisions: 150 / (150 + 2) = 0.9868 for Normal and 388 / (388 + 84) = 0.8220 for Pneumonia.
 
-## Dataset Setup
+**3. Every model over-calls pneumonia.**
+Pneumonia recall is 0.9769–0.9974 for all six models, while Normal recall is only 0.3077–0.6410. The thresholds are tuned on validation Pneumonia F1, and the validation and test distributions differ.
 
-Download from Kaggle and extract into:
+**4. Validation scores were optimistic for every model.**
+Validation macro F1 is higher than test macro F1 for all six models, by 0.1187 (Phase 2 fine-tuned: 0.9574 − 0.8387) up to 0.2708 (K-Fold ensemble: 0.9274 − 0.6566). This is why I only trust the test numbers.
 
-```
-data/raw/train/NORMAL/
-data/raw/train/PNEUMONIA/
-data/raw/val/NORMAL/
-data/raw/val/PNEUMONIA/
-data/raw/test/NORMAL/
-data/raw/test/PNEUMONIA/
-```
-
-Run `01_data_exploration.ipynb` first — it automatically reconstructs the val split from the training set.
+**5. Ranking quality is good even where the chosen threshold is not.**
+ROC-AUC, which does not depend on a threshold, is 0.8900–0.9768. The K-Fold ensemble, for example, ranks images well (ROC-AUC 0.9431) but at its validation-tuned threshold of 0.20 it has a Normal recall of only 0.3205.
 
 ---
 
-## Phase 1 — Architecture
+## Struggles and lessons
 
-### Strategies 1 & 2 (Class Weights, Oversampling)
-A deeper 4-block CNN with Global Average Pooling:
+These are the problems I actually hit. Each one points to where the evidence lives in this repository.
+
+<details>
+<summary><b>The Kaggle validation set had only 16 images</b></summary>
+
+- **Problem:** the original Kaggle `val/` folder had 8 Normal and 8 Pneumonia images (printed in `notebooks/01_data_exploration.ipynb`). EarlyStopping and ReduceLROnPlateau were reacting to 16 images.
+- **What I did:** in `01_data_exploration.ipynb` I moved a stratified 10% of the training set into `val/` before any training: 135 Normal and 388 Pneumonia, giving 539 validation images (143 Normal, 396 Pneumonia).
+- **Lesson:** check the size of every split before trusting any callback, checkpoint or tuned threshold that depends on it.
+
+</details>
+
+<details>
+<summary><b>Imbalance strategies did not fix Normal recall</b></summary>
+
+- **Problem:** I tried class weights, disk-level oversampling, and two balanced-batch K-Fold ensembles. The oversampling notebook went through a commit literally titled "Trying Optimizing OverSampling (Status-Fail)" before "Improvised aug in oversampling", and the class weights were hand-tuned down from the sklearn defaults to `{Normal: 1.6, Pneumonia: 0.8}` (`02_model_training_class_weights.ipynb`). In the final evaluation all four Phase 1 models still have Normal recall between 0.3077 and 0.4274.
+- **What I did:** kept all four as an honest comparison, then moved to transfer learning (Phase 2), which reached 0.6410.
+- **Lesson:** rebalancing the training data does not automatically give balanced test performance; measure each class separately.
+
+</details>
+
+<details>
+<summary><b>The threshold search range was too narrow</b></summary>
+
+- **Problem:** thresholds were first searched between 0.20 and 0.80. The Phase 2 notebook's own search printed `Val-tuned threshold: 0.20`, exactly the lower edge of the grid, which means the real optimum could be lower.
+- **What I did:** widened the grid in `03_evaluation.ipynb` to 0.05–0.95 (step 0.01) and re-ran it. The Phase 2 thresholds moved to 0.12 (frozen) and 0.11 (fine-tuned), both below the old 0.20 floor. The web app reads the same grid (`webapp/model-service/app/benchmarks.py`).
+- **Lesson:** if a tuned value lands on the edge of the search range, the range is wrong, not the model.
+
+</details>
+
+<details>
+<summary><b>Keras generators did not do what I assumed</b></summary>
+
+- **Problem:** in the custom K-Fold notebook (`02_model_training_k_fold_custom.ipynb`) I found that `rescale=1/255` in the training `ImageDataGenerator` was silently ignored, because my custom generator calls `random_transform()`, which only applies the geometric augmentations.
+- **What I did:** rescaled manually (`img / 255.0`) inside the generator and documented it in a markdown cell, together with an execution-order warning about the augmented-file cleanup cell.
+- **Lesson:** verify what preprocessing actually runs, not what the configuration says.
+
+</details>
+
+<details>
+<summary><b>Serving had to copy the evaluation preprocessing exactly</b></summary>
+
+- **Problem:** Phase 1 and Phase 2 models need different inputs (grayscale with `/255`, versus RGB with the rescaling inside the model), and the Phase 1 K-Fold models were trained with OpenCV bilinear resizing but evaluated by `flow_from_directory`, which resizes with nearest-neighbour by default.
+- **What I did:** the model service stores colour mode, interpolation and rescaling per model (`webapp/model-service/app/registry.py`) and follows `03_evaluation.ipynb`, because that is the pipeline the thresholds were tuned on. `webapp/model-service/tests/test_preprocessing_tf.py` checks that the served input is bit-for-bit equal to the evaluation generator's output for both preprocessing paths.
+- **Lesson:** a model is its weights *plus* its preprocessing; test them together.
+
+</details>
+
+<details>
+<summary><b>The README drifted away from the real results</b></summary>
+
+- **Problem:** the README results table was written for an earlier evaluation. After the final evaluation it no longer matched `results/comparison.csv` (compare `git show 1e301e9:README.md` with the current CSV).
+- **What I did:** every number in this README is now copied from the CSVs, and checked against them with a small script.
+- **Lesson:** results tables should come from the results files, never from memory.
+
+</details>
+
+<details>
+<summary><b>Windows-specific setup problems</b></summary>
+
+- **Problem:** Windows Device Guard blocks the `uvicorn.exe` launcher, Node is not on `PATH` in my shell, and TensorFlow should not be installed into the lightweight environment used for web development.
+- **What I did:** start the model service with `python -m uvicorn`, prepend Node's folder to `PATH`, and keep two conda environments: `ai-web` (no TensorFlow, mock mode) and `ai-cpu` (TensorFlow, real models). Details in `webapp/README.md` and `CLAUDE.md`.
+- **Lesson:** write down environment quirks next to the run commands, not in your head.
+
+</details>
+
+<details>
+<summary><b>The first prediction is slow, and the proxy had hidden limits</b></summary>
+
+- **Problem:** the first request loads the `.h5` models from disk, and the API is allowed to wait up to 120 s for the model service, but Next.js's proxy gives up after 30 s by default. Next.js also silently cuts proxied request bodies at 10 MiB, and a cut-off upload made the API answer with a 500 error.
+- **What I did:** raised `proxyTimeout` and `proxyClientMaxBodySize` in `webapp/frontend/next.config.ts` (with comments explaining why), mapped the truncated-upload error to a 400 (`webapp/api/src/errors.ts`, with a test in `webapp/api/test/scans.test.ts`), report a `cold_start` flag per model, and show "the first run loads the models and can take a while" in the UI.
+- **Lesson:** time the cold path, not just the warm one, and read the defaults of every layer between the browser and the model.
+
+</details>
+
+<details>
+<summary><b>The first web app was too complex for me to explain</b></summary>
+
+- **Problem:** the frontend grew more complex than I could explain file by file in an interview, which `CLAUDE.md` sets as the bar for this project.
+- **What I did:** simplified it (commit "Stage 1-3b: model service (mock), Express API, simplified frontend") under explicit rules in `CLAUDE.md`: at most about 8 components, plain `fetch`/`useState`/`useEffect`, no animation or UI libraries, and a comment at the top of every file.
+- **Lesson:** in a portfolio project, code you can explain line by line beats code that looks impressive.
+
+</details>
+
+---
+
+## Results
+
+All six models are evaluated by `notebooks/03_evaluation.ipynb` on the same test set (234 Normal, 390 Pneumonia). Each threshold is tuned on the 539-image validation set by searching 0.05 to 0.95 (step 0.01) for the best Pneumonia F1, then the test set is scored once at that threshold. Sorted by test accuracy:
+
+| Model | Threshold | Accuracy | Normal recall | Pneumonia recall | Macro F1 | ROC-AUC |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Phase 2 fine-tuned** | **0.11** | **0.8622** | **0.6410** | **0.9949** | **0.8387** | **0.9768** |
+| Phase 2 frozen | 0.12 | 0.7965 | 0.4615 | 0.9974 | 0.7447 | 0.9644 |
+| K-Fold custom ensemble | 0.49 | 0.7821 | 0.4274 | 0.9949 | 0.7231 | 0.9412 |
+| OverSampling | 0.44 | 0.7484 | 0.3675 | 0.9769 | 0.6760 | 0.8900 |
+| K-Fold ensemble | 0.20 | 0.7436 | 0.3205 | 0.9974 | 0.6566 | 0.9431 |
+| Class Weights | 0.39 | 0.7292 | 0.3077 | 0.9821 | 0.6397 | 0.8957 |
+
+Bars show test accuracy, the line shows Normal recall (same order as the table):
+
+```mermaid
+xychart-beta
+    title "Test accuracy (bars) and Normal recall (line)"
+    x-axis ["Phase 2 fine-tuned", "Phase 2 frozen", "K-Fold custom ensemble", "OverSampling", "K-Fold ensemble", "Class Weights"]
+    y-axis "Score" 0 --> 1
+    bar [0.8622, 0.7965, 0.7821, 0.7484, 0.7436, 0.7292]
+    line [0.6410, 0.4615, 0.4274, 0.3675, 0.3205, 0.3077]
+```
+
+95% bootstrap confidence intervals for accuracy, both recalls and ROC-AUC are in [`results/comparison_ci.csv`](results/comparison_ci.csv). Confusion matrices, ROC and PR curves and Grad-CAM examples are in [`results/figures/`](results/figures/).
+
+---
+
+## Demo web app
+
+<!-- Demo GIF: record a short screen capture of an upload and its results, save it as docs/demo.gif,
+     then replace this comment with: ![Demo](docs/demo.gif) -->
+
+A small local web app (`webapp/`): upload one chest X-ray and every available model predicts on it. Each model shows its probability of pneumonia, its own validation-tuned threshold, its label and its inference time; the Phase 2 fine-tuned model also shows a Grad-CAM heatmap over the image. A "Comparative analysis" mode lets you pick models and adds their benchmark numbers from the CSVs. Past scans are saved and listed on a History page. A mock mode returns clearly labelled fake predictions so the website can be developed without TensorFlow.
+
+```mermaid
+flowchart LR
+    U["Browser"] -->|"/api/..."| N["Next.js frontend :3000"]
+    N -->|"rewrite"| E["Express API :4000"]
+    E -->|"image upload"| F["FastAPI model service :8000"]
+    E --- S[("SQLite and stored scans")]
+    F --- M[("models/*.h5 and results/*.csv")]
+```
+
+The browser only ever talks to the Next.js server; it never calls the model service directly.
+
+<details>
+<summary><b>What is tested</b></summary>
+
+| Part | Test files | Tests |
+|---|---|---|
+| Model service (pytest) | `test_health.py` (4), `test_models.py` (14), `test_predict.py` (24), `test_registry_contract.py` (13) | 55 in mock mode, no TensorFlow needed |
+| Model service, real models (pytest, `-m tf`) | `test_preprocessing_tf.py` (3) | served input equals the evaluation generator for both preprocessing paths; Grad-CAM on the fine-tuned model |
+| API (vitest) | `db.test.ts` (8), `scans.test.ts` (28), `service.test.ts` (7) | 43 test definitions, 80 test cases once parametrised tables expand |
+| Frontend (vitest) | `errors.test.ts` (3), `format.test.ts` (4) | 7 |
+
+Highlights: the model registry is checked against the registry and generator cells of `03_evaluation.ipynb`; the API is tested against a fake model service for uploads, validation errors, service down or timing out, history paging, path-traversal attempts, and that deleting a scan removes both its database rows and its files.
+
+</details>
+
+Setup and run commands (mock mode and real mode): [`webapp/README.md`](webapp/README.md).
+
+---
+
+## Limitations
+
+- **One dataset.** All models were trained on one public pediatric chest X-ray dataset. They may not generalise to adults, other hospitals, other scanners or other image formats.
+- **Not a medical device.** This is an educational project. It must not be used for diagnosis.
+- **Low Normal recall.** Every model over-calls pneumonia (Normal recall 0.3077–0.6410), so many healthy X-rays would be flagged.
+- **Thresholds come from the validation set only.** That is deliberate, but validation was optimistic for every model (see [Key findings](#key-findings)).
+- **Phase 1 resize mismatch.** The Phase 1 K-Fold models were trained with OpenCV bilinear resizing but are evaluated and served with nearest-neighbour resizing, to match the pipeline the thresholds were tuned on.
+- **Grad-CAM only for Phase 2 fine-tuned.** A heatmap shows where the model looked, not whether it was right.
+- **Untested hypothesis:** the validation set is 26.5% Normal (143 / 539) while the test set is 37.5% Normal (234 / 624). This difference in class mix *might* contribute to the low Normal recall at the validation-tuned thresholds; I have not tested it.
+
+**Ideas, not promises:** test the class-mix hypothesis above; try a threshold objective that weighs Normal recall too; evaluate on a second, independent X-ray dataset.
+
+---
+
+## Reproduce it
+
+1. Download the [Kaggle Chest X-Ray Images (Pneumonia)](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia) dataset into `data/train/`, `data/val/` and `data/test/` (each with `NORMAL/` and `PNEUMONIA/`).
+2. Create a Python 3.10 environment and install [`requirements.txt`](requirements.txt).
+3. Run the notebooks in order: `01_data_exploration.ipynb` (it **moves** images from `train/` to `val/`, so run it once), the five `02_model_training_*.ipynb` notebooks, then `03_evaluation.ipynb`. Models are saved to `models/phase1/` and `models/phase2/`; results to `results/`.
+4. For the web app, follow [`webapp/README.md`](webapp/README.md).
+
+<details>
+<summary><b>Class distribution (after rebuilding the validation set)</b></summary>
+
+| Split | NORMAL | PNEUMONIA | Total |
+|---|---:|---:|---:|
+| Train | 1,206 | 3,487 | 4,693 |
+| Val | 143 | 396 | 539 |
+| Test | 234 | 390 | 624 |
+
+The original Kaggle split had 1,341 / 3,875 in train and 8 / 8 in val; 135 Normal and 388 Pneumonia images were moved from train to val (`01_data_exploration.ipynb`).
+
+</details>
+
+<details>
+<summary><b>Phase 1: architectures and imbalance strategies</b></summary>
+
+**Strategies 1 and 2 (Class Weights, OverSampling)** use a 4-block CNN with Global Average Pooling (used instead of Flatten to reduce parameters and overfitting):
 
 ```
 Input (224×224×1 grayscale)
@@ -114,8 +278,7 @@ Input (224×224×1 grayscale)
   → Dense(1, sigmoid)
 ```
 
-### Strategies 3 & 4 (K-Fold variants)
-A lighter 2-block CNN with Flatten (3 instances trained per strategy):
+**Strategies 3 and 4 (K-Fold ensembles)** use a lighter 2-block CNN, three models per strategy:
 
 ```
 Input (224×224×1 grayscale)
@@ -126,88 +289,70 @@ Input (224×224×1 grayscale)
   → Dense(1, sigmoid)
 ```
 
-**Shared training config:**
-- Optimizer: Adam (lr = 0.0001)
-- Loss: Binary Crossentropy
-- Metrics: Accuracy, Precision, Recall
-- Callbacks: EarlyStopping + ReduceLROnPlateau + ModelCheckpoint
+Shared: Adam (lr 0.0001), binary cross-entropy, EarlyStopping + ReduceLROnPlateau + ModelCheckpoint.
 
----
+- **Class Weights:** class weights `{Normal: 1.6, Pneumonia: 0.8}`, hand-tuned down from the sklearn balanced defaults (about 1.95 / 0.67).
+- **OverSampling:** augmented copies of Normal images written to disk until Normal matched Pneumonia (1,206 → 3,487), then deleted after training.
+- **K-Fold ensemble:** a generator that samples exactly half Normal and half Pneumonia in every batch (with replacement), three folds from `sklearn.StratifiedKFold`; the prediction is the mean of the three models.
+- **K-Fold custom ensemble:** the same, but with a hand-written stratified K-Fold split instead of sklearn's.
 
-## Imbalance Strategies Compared
+</details>
 
-### Strategy 1 — Class Weights
-Adjusted class weights `{Normal: 1.6, Pneumonia: 0.8}` passed to `model.fit()`. All callbacks monitor `val_loss`. The weights were manually tuned down from the fully-balanced sklearn defaults (~1.95 / 0.67) to avoid over-correcting.
+<details>
+<summary><b>Phase 2: MobileNetV2 architecture and training</b></summary>
 
-### Strategy 2 — Disk-level Oversampling
-Augmented copies of Normal images written to disk using OpenCV + `ImageDataGenerator` until Normal count matched Pneumonia (1,199 → 3,480). Online augmentation applied during training via a separate `train_datagen`. Augmented files deleted after training to keep the repo clean.
+From `notebooks/02_model_training_phase2_transfer.ipynb`:
 
-### Strategy 3 — K-Fold with Balanced Batch Generator (sklearn StratifiedKFold)
-A custom generator samples exactly `batch_size/2` Positives and Negatives per batch (with replacement), removing dataset-level imbalance without copying files. Three folds trained via `sklearn.StratifiedKFold`. Final predictions are the soft-vote average of all three fold models.
+```
+Input (224×224×3 RGB, raw 0–255 pixels)
+  → Rescaling(1/127.5, offset=-1)      # MobileNetV2 preprocessing, inside the model
+  → MobileNetV2 (ImageNet weights, no top)
+  → GlobalAveragePooling2D
+  → Dense(256, relu) + Dropout(0.4)
+  → Dense(1, sigmoid)
+```
 
-### Strategy 4 — K-Fold with Custom StratifiedKFold
-Identical training setup to Strategy 3 but with a hand-written `custom_stratified_kfold_split()` function replacing `sklearn.StratifiedKFold`. Implemented to validate understanding of the stratification algorithm and confirm that results are reproducible without the sklearn dependency.
+- **Input:** X-rays are loaded as 3-channel RGB with bilinear resizing so the ImageNet weights can be used as they are.
+- **Training data:** a balanced per-batch generator (equal Normal and Pneumonia per batch, sampled with replacement) with online augmentation: rotation, zoom, width/height shift, shear and horizontal flip.
+- **Stage 1, frozen backbone:** only the new head is trained (Adam, lr 1e-3). Saved as **Phase 2 frozen**.
+- **Stage 2, fine-tuning:** the last 30 layers of MobileNetV2 are unfrozen while BatchNormalization layers stay frozen (19 trainable backbone layers), trained with Adam at lr 1e-5. Saved as **Phase 2 fine-tuned**.
+- Both stages: up to 15 epochs with EarlyStopping, ReduceLROnPlateau and ModelCheckpoint on `val_loss`, plus a save/load round-trip check.
+- **Grad-CAM** is computed on the last MobileNetV2 feature map to show which regions drive the pneumonia prediction.
 
----
+</details>
 
-## Phase 1 Results
+<details>
+<summary><b>Repository layout</b></summary>
 
-All models evaluated on the same held-out test set (234 Normal, 390 Pneumonia). Classification threshold optimised per model by searching `[0.20, 0.80]` to maximise Pneumonia F1-score.
+```
+Chest-Xray-Pneumonia-Detection/
+├── data/                       # Kaggle images: train/, val/, test/ (not in git)
+├── notebooks/
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_model_training_class_weights.ipynb
+│   ├── 02_model_training_OverSample.ipynb
+│   ├── 02_model_training_k_fold.ipynb
+│   ├── 02_model_training_k_fold_custom.ipynb
+│   ├── 02_model_training_phase2_transfer.ipynb
+│   └── 03_evaluation.ipynb
+├── models/                     # phase1/ and phase2/ .h5 files (not in git)
+├── results/
+│   ├── comparison.csv          # test metrics + validation-tuned threshold per model
+│   ├── comparison_ci.csv       # bootstrap 95% confidence intervals
+│   ├── figures/                # confusion matrices, ROC/PR curves, Grad-CAM examples
+│   └── predictions/            # cached model predictions (.npy)
+├── webapp/                     # demo web app, see webapp/README.md
+│   ├── frontend/               # Next.js website
+│   ├── api/                    # Express API + SQLite
+│   └── model-service/          # FastAPI model server
+├── requirements.txt
+└── README.md
+```
 
-| Strategy | Threshold | Normal Recall | Pneumonia Recall | Accuracy | F1 (Pneumonia) | Macro F1 |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Class Weights | 0.79 | 0.48 | 0.95 | 0.77 | 0.84 | 0.73 |
-| Oversampling | 0.66 | 0.58 | 0.96 | 0.82 | 0.87 | 0.79 |
-| KFold Ensemble (sklearn) | 0.79 | 0.82 | 0.92 | 0.88 | 0.91 | 0.87 |
-| **KFold Ensemble (custom)** | **0.76** | **0.83** | **0.93** | **0.89** | **0.91** | **0.88** |
-
-### Key Findings
-
-> **1. Validation set size is foundational.** The original 16-image val set caused EarlyStopping and ReduceLROnPlateau to react to noise rather than signal. Reconstructing a properly-sized val set was the most impactful fix in the entire project.
-
-> **2. Dataset-level balancing alone is insufficient.** Class Weights and Oversampling both improved Pneumonia recall significantly, but at the cost of Normal recall (0.48 and 0.58 respectively). The model sees more Pneumonia examples relative to the signal it gets from Normal, regardless of dataset-level adjustments.
-
-> **3. Batch-level balancing is more effective.** The K-Fold strategies, which guarantee equal Normal/Pneumonia sampling *within each batch*, achieved the best balance — Normal recall 0.82–0.83, Pneumonia recall 0.92–0.93 — without requiring any copies to be written to disk.
-
-> **4. Custom KFold matched sklearn KFold exactly.** Strategy 4 reproduced Strategy 3's results within 0.001, confirming correctness of the hand-written stratification logic.
-
----
-
-## Tech Stack
-
-- Python 3.10
-- TensorFlow / Keras 2.20.0
-- NumPy, Pandas, Matplotlib
-- OpenCV (cv2)
-- Pillow (PIL)
-- scikit-learn
-
----
-
-## Roadmap
-
-### Phase 1 — CNN from Scratch (Complete)
-- [x] EDA + val set reconstruction from original Kaggle data
-- [x] Class Weights model (4-block CNN, GAP)
-- [x] Disk-level Oversampling model (4-block CNN, GAP)
-- [x] K-Fold ensemble with balanced batch generator (sklearn split)
-- [x] K-Fold ensemble with custom stratified split implementation
-- [x] Unified evaluation: threshold search, classification report, confusion matrix, comparison table
-
-### Phase 2 (Final) — Transfer Learning + Explainability (Planned)
-
-**Goal:** Replace the scratch CNN backbone with a pretrained feature extractor, understand what the model is actually looking at, and show a direct improvement over Phase 1 — without expanding scope beyond that.
-
-- [ ] Adapt a pretrained backbone (MobileNetV2 or EfficientNetB0) for single-channel X-ray input
-- [ ] Fine-tune with progressive unfreezing (freeze base → train head → unfreeze top blocks)
-- [ ] Grad-CAM heatmaps to visualise which lung regions drive predictions
-- [ ] Head-to-head comparison against Phase 1 metrics (same test set, same threshold search)
-- [ ] Refactor training logic into reusable `src/` scripts (`data_loader.py`, `model.py`, `train.py`, `evaluate.py`)
-
-This phase is scoped deliberately: a pretrained backbone swap, Grad-CAM explainability, and a same-test-set comparison against Phase 1. Vision Transformers, cross-architecture ensembles, and the geospatial/satellite extension are considered out of scope for this project and are not planned.
+</details>
 
 ---
 
 ## Disclaimer
 
-This project is strictly for educational and research purposes. It must not be used for real-world medical diagnosis without rigorous clinical validation and regulatory approval.
+This project is strictly for educational and research purposes. It is not a medical device and must not be used for real-world medical diagnosis.

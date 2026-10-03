@@ -138,7 +138,7 @@ cd webapp\frontend; npx tsc --noEmit; npx eslint .; npx vitest run
 ## Where the numbers come from
 
 - **Predictions** come live from the model service.
-- **Thresholds**: each model uses its own decision threshold, tuned on the 553-image validation set
+- **Thresholds**: each model uses its own decision threshold, tuned on the 539-image validation set
   in `03_evaluation.ipynb` and read from `results/comparison.csv`. The label is Pneumonia when the
   probability is above that threshold. If the CSV (or a model's row) is missing, 0.5 is used and the
   model is marked "uncalibrated threshold".
@@ -152,6 +152,7 @@ cd webapp\frontend; npx tsc --noEmit; npx eslint .; npx vitest run
 - **One dataset.** All models were trained on one public pediatric chest X-ray dataset. They may not
   generalise to adults, other hospitals, other scanners or other image formats.
 - **Not a medical device.** This is an educational demo. It must not be used for diagnosis.
+- **Low Normal recall.** Normal recall is low for every model because the models over-call pneumonia.
 - **Phase 1 resize mismatch (kept on purpose).** The Phase 1 K-Fold models were trained with images
   resized by OpenCV (bilinear), but `03_evaluation.ipynb` evaluates them with Keras'
   `flow_from_directory`, which uses nearest-neighbour resizing by default. The web app serves them with
@@ -167,3 +168,5 @@ cd webapp\frontend; npx tsc --noEmit; npx eslint .; npx vitest run
   A heatmap shows where the model looked, not whether it was right.
 - **EXIF rotation is ignored**, like in training: images are shown and processed in the pixel order
   stored in the file, so a phone photo with a rotation flag may appear sideways.
+- **History thumbnails are the full images.** No small thumbnail is stored, so each row on the History
+  page loads the original upload (up to 10 MB, loaded lazily) and crops it with CSS.
