@@ -78,90 +78,70 @@ ROC-AUC, which does not depend on a threshold, is 0.8900–0.9768. The K-Fold en
 
 ## Struggles and lessons
 
-These are the problems I actually hit. Each one points to where the evidence lives in this repository.
+These are the problems I actually hit, roughly in the order they changed the project. The ML side was familiar to me; the frontend was new, so some entries are about learning that side. Each one points to where the evidence lives in this repository.
 
 <details>
 <summary><b>The Kaggle validation set had only 16 images</b></summary>
 
-- **Problem:** the original Kaggle `val/` folder had 8 Normal and 8 Pneumonia images (printed in `notebooks/01_data_exploration.ipynb`). EarlyStopping and ReduceLROnPlateau were reacting to 16 images.
-- **What I did:** in `01_data_exploration.ipynb` I moved a stratified 10% of the training set into `val/` before any training: 135 Normal and 388 Pneumonia, giving 539 validation images (143 Normal, 396 Pneumonia).
-- **Lesson:** check the size of every split before trusting any callback, checkpoint or tuned threshold that depends on it.
+- **Problem:** while exploring the data in `notebooks/01_data_exploration.ipynb` I printed the split sizes and saw that the original `val/` folder had 8 Normal and 8 Pneumonia images. EarlyStopping and ReduceLROnPlateau would have been reacting to 16 images, which is mostly noise.
+- **What I did:** before any training, I moved a stratified 10% of the training set into `val/` (135 Normal, 388 Pneumonia), giving 539 validation images (143 Normal, 396 Pneumonia). [One line, your words: why 10%, why stratified.]
+- **Lesson:** print the size of every split before trusting any callback, checkpoint or threshold that depends on it.
 
 </details>
 
 <details>
-<summary><b>Imbalance strategies did not fix Normal recall</b></summary>
+<summary><b>My threshold landed exactly on the edge of my search grid</b></summary>
 
-- **Problem:** I tried class weights, disk-level oversampling, and two balanced-batch K-Fold ensembles. The oversampling notebook went through a commit literally titled "Trying Optimizing OverSampling (Status-Fail)" before "Improvised aug in oversampling", and the class weights were hand-tuned down from the sklearn defaults to `{Normal: 1.6, Pneumonia: 0.8}` (`02_model_training_class_weights.ipynb`). In the final evaluation all four Phase 1 models still have Normal recall between 0.3077 and 0.4274.
-- **What I did:** kept all four as an honest comparison, then moved to transfer learning (Phase 2), which reached 0.6410.
-- **Lesson:** rebalancing the training data does not automatically give balanced test performance; measure each class separately.
-
-</details>
-
-<details>
-<summary><b>The threshold search range was too narrow</b></summary>
-
-- **Problem:** thresholds were first searched between 0.20 and 0.80. The Phase 2 notebook's own search printed `Val-tuned threshold: 0.20`, exactly the lower edge of the grid, which means the real optimum could be lower.
-- **What I did:** widened the grid in `03_evaluation.ipynb` to 0.05–0.95 (step 0.01) and re-ran it. The Phase 2 thresholds moved to 0.12 (frozen) and 0.11 (fine-tuned), both below the old 0.20 floor. The web app reads the same grid (`webapp/model-service/app/benchmarks.py`).
-- **Lesson:** if a tuned value lands on the edge of the search range, the range is wrong, not the model.
+- **Problem:** I first searched thresholds between 0.20 and 0.80. The Phase 2 notebook printed `Val-tuned threshold: 0.20`, exactly the lower bound. A best value sitting on the edge means the search was cut off, so the real optimum could be lower.
+- **What I did:** widened the grid in `03_evaluation.ipynb` to 0.05–0.95 (step 0.01) and re-ran it. The thresholds moved to 0.12 (frozen) and 0.11 (fine-tuned), both below my old floor. The web app reads the same grid (`webapp/model-service/app/benchmarks.py`).
+- **Lesson:** if a tuned value lands on the edge of its range, suspect the range before the model.
 
 </details>
 
 <details>
-<summary><b>Keras generators did not do what I assumed</b></summary>
+<summary><b>`rescale=1/255` was silently ignored in my K-Fold generator</b></summary>
 
-- **Problem:** in the custom K-Fold notebook (`02_model_training_k_fold_custom.ipynb`) I found that `rescale=1/255` in the training `ImageDataGenerator` was silently ignored, because my custom generator calls `random_transform()`, which only applies the geometric augmentations.
-- **What I did:** rescaled manually (`img / 255.0`) inside the generator and documented it in a markdown cell, together with an execution-order warning about the augmented-file cleanup cell.
-- **Lesson:** verify what preprocessing actually runs, not what the configuration says.
-
-</details>
-
-<details>
-<summary><b>Serving had to copy the evaluation preprocessing exactly</b></summary>
-
-- **Problem:** Phase 1 and Phase 2 models need different inputs (grayscale with `/255`, versus RGB with the rescaling inside the model), and the Phase 1 K-Fold models were trained with OpenCV bilinear resizing but evaluated by `flow_from_directory`, which resizes with nearest-neighbour by default.
-- **What I did:** the model service stores colour mode, interpolation and rescaling per model (`webapp/model-service/app/registry.py`) and follows `03_evaluation.ipynb`, because that is the pipeline the thresholds were tuned on. `webapp/model-service/tests/test_preprocessing_tf.py` checks that the served input is bit-for-bit equal to the evaluation generator's output for both preprocessing paths.
-- **Lesson:** a model is its weights *plus* its preprocessing; test them together.
+- **Problem:** in `02_model_training_k_fold_custom.ipynb` I found that `rescale=1/255` on the training `ImageDataGenerator` did nothing, because my custom generator calls `random_transform()`, which only applies the geometric augmentations.
+- **What I did:** rescaled manually (`img / 255.0`) inside the generator, and documented it in a markdown cell along with an execution-order warning for the augmented-file cleanup cell.
+- **Lesson:** check what preprocessing actually runs, not what the config says.
 
 </details>
 
 <details>
-<summary><b>The README drifted away from the real results</b></summary>
+<summary><b>The served model had to match the evaluation preprocessing exactly</b></summary>
 
-- **Problem:** the README results table was written for an earlier evaluation. After the final evaluation it no longer matched `results/comparison.csv` (compare `git show 1e301e9:README.md` with the current CSV).
-- **What I did:** every number in this README is now copied from the CSVs, and checked against them with a small script.
-- **Lesson:** results tables should come from the results files, never from memory.
-
-</details>
-
-<details>
-<summary><b>Windows-specific setup problems</b></summary>
-
-- **Problem:** Windows Device Guard blocks the `uvicorn.exe` launcher, Node is not on `PATH` in my shell, and TensorFlow should not be installed into the lightweight environment used for web development.
-- **What I did:** start the model service with `python -m uvicorn`, prepend Node's folder to `PATH`, and keep two conda environments: `ai-web` (no TensorFlow, mock mode) and `ai-cpu` (TensorFlow, real models). Details in `webapp/README.md` and `CLAUDE.md`.
-- **Lesson:** write down environment quirks next to the run commands, not in your head.
+- **Problem:** Phase 1 and Phase 2 models need different inputs (grayscale with `/255` versus RGB with rescaling inside the model). Also, the Phase 1 K-Fold models were trained with OpenCV bilinear resizing but evaluated through `flow_from_directory`, which resizes with nearest-neighbour by default. My thresholds were tuned on the evaluation pipeline, so serving with different preprocessing would quietly invalidate them.
+- **What I did:** the model service stores colour mode, interpolation and rescaling per model (`webapp/model-service/app/registry.py`) and follows `03_evaluation.ipynb`. I wrote `webapp/model-service/tests/test_preprocessing_tf.py` to check that the served input is bit-for-bit equal to the evaluation generator's output for both paths.
+- **Lesson:** a model is its weights plus its preprocessing, so test them together.
 
 </details>
 
 <details>
-<summary><b>The first prediction is slow, and the proxy had hidden limits</b></summary>
+<summary><b>Four ways of rebalancing training did not fix Normal recall</b></summary>
 
-- **Problem:** the first request loads the `.h5` models from disk, and the API is allowed to wait up to 120 s for the model service, but Next.js's proxy gives up after 30 s by default. Next.js also silently cuts proxied request bodies at 10 MiB, and a cut-off upload made the API answer with a 500 error.
-- **What I did:** raised `proxyTimeout` and `proxyClientMaxBodySize` in `webapp/frontend/next.config.ts` (with comments explaining why), mapped the truncated-upload error to a 400 (`webapp/api/src/errors.ts`, with a test in `webapp/api/test/scans.test.ts`), report a `cold_start` flag per model, and show "the first run loads the models and can take a while" in the UI.
-- **Lesson:** time the cold path, not just the warm one, and read the defaults of every layer between the browser and the model.
+- **Problem:** I expected that fixing the class balance during training would fix Normal recall. I tried class weights (hand-tuned down from the sklearn defaults to `{Normal: 1.6, Pneumonia: 0.8}`, in `02_model_training_class_weights.ipynb`), disk-level oversampling (my first attempt was committed as "Trying Optimizing OverSampling (Status-Fail)"), and two balanced-batch K-Fold ensembles. All four Phase 1 models still ended with Normal recall between 0.3077 and 0.4274.
+- **What I did:** kept all four as an honest comparison and moved to transfer learning (Phase 2), which reached 0.6410.
+- **Lesson:** rebalancing the training data did not give balanced test performance. [Your own read on why, in one sentence.] I now report each class separately.
 
 </details>
 
 <details>
-<summary><b>The first web app was too complex for me to explain</b></summary>
+<summary><b>As a frontend beginner, I didn't know the proxy had its own limits</b></summary>
 
-- **Problem:** the frontend grew more complex than I could explain file by file in an interview, which `CLAUDE.md` sets as the bar for this project.
-- **What I did:** simplified it (commit "Stage 1-3b: model service (mock), Express API, simplified frontend") under explicit rules in `CLAUDE.md`: at most about 8 components, plain `fetch`/`useState`/`useEffect`, no animation or UI libraries, and a comment at the top of every file.
-- **Lesson:** in a portfolio project, code you can explain line by line beats code that looks impressive.
+- **Problem:** the first prediction is slow because it loads the `.h5` models from disk. My API waits up to 120 s for the model service, but Next.js's proxy gives up after 30 s by default. It also silently cuts proxied request bodies at 10 MiB, and a truncated upload made my API return a 500.
+- **What I did:** raised `proxyTimeout` and `proxyClientMaxBodySize` in `webapp/frontend/next.config.ts` (with comments on why), mapped the truncated-upload error to a 400 (`webapp/api/src/errors.ts`, tested in `webapp/api/test/scans.test.ts`), added a `cold_start` flag per model, and made the UI say that the first run can take a while.
+- **Lesson:** time the cold path, not just the warm one, and look up the defaults of every layer between the browser and the model.
 
 </details>
 
----
+<details>
+<summary><b>My first frontend grew bigger than I could explain, so I cut it back</b></summary>
+
+- **Problem:** I'm new to frontend, and the first version grew more complex than I could explain file by file, which is the bar I set for this project in `CLAUDE.md`.
+- **What I did:** rebuilt it smaller (commit "Stage 1-3b: model service (mock), Express API, simplified frontend") under rules I wrote down in `CLAUDE.md`: at most about 8 components, plain `fetch`/`useState`/`useEffect`, no animation or UI libraries, and a comment at the top of every file. The value of this project is the model pipeline, not the UI.
+- **Lesson:** in a portfolio project, code I can explain line by line beats code that looks impressive.
+
+</details>
 
 ## Results
 
@@ -181,7 +161,7 @@ Bars show test accuracy, the line shows Normal recall (same order as the table):
 ```mermaid
 xychart-beta
     title "Test accuracy (bars) and Normal recall (line)"
-    x-axis ["Phase 2 fine-tuned", "Phase 2 frozen", "K-Fold custom ensemble", "OverSampling", "K-Fold ensemble", "Class Weights"]
+    x-axis ["Fine-tuned", "Phase-2 Frozen", "K-Fold custom", "OverSampling", "K-Fold ensemble", "Class Weights"]
     y-axis "Score" 0 --> 1
     bar [0.8622, 0.7965, 0.7821, 0.7484, 0.7436, 0.7292]
     line [0.6410, 0.4615, 0.4274, 0.3675, 0.3205, 0.3077]
