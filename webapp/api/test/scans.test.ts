@@ -189,6 +189,21 @@ describe("POST /api/scans", () => {
       expectNothingStored();
     });
 
+    it("rejects a truncated multipart upload with 400, not 500", async () => {
+      // The body stops in the middle of the image part and never sends the closing boundary
+      const boundary = "----truncated";
+      const body =
+        `--${boundary}\r\nContent-Disposition: form-data; name="mode"\r\n\r\nall\r\n` +
+        `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="x.jpg"\r\n` +
+        "Content-Type: image/jpeg\r\n\r\n\xff\xd8\xff partial image data";
+      const res = await request(ctx.app)
+        .post("/api/scans")
+        .set("Content-Type", `multipart/form-data; boundary=${boundary}`)
+        .send(body);
+      expectError(res, 400, "VALIDATION");
+      expectNothingStored();
+    });
+
     it("rejects an unexpected file field", async () => {
       const res = await postScan(ctx.app).attach("other", JPEG, "x.jpg");
       expectError(res, 400, "VALIDATION");

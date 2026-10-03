@@ -27,7 +27,10 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, next) => {
   let apiError: ApiError;
   if (err instanceof ApiError) apiError = err;
   else if (err instanceof multer.MulterError) apiError = fromMulter(err);
-  else {
+  // busboy (multer's parser) throws a plain Error when the body ends before the closing boundary
+  else if (err instanceof Error && err.message === "Unexpected end of form") {
+    apiError = new ApiError(400, "VALIDATION", "The upload was incomplete.");
+  } else {
     console.error(err);
     apiError = new ApiError(500, "INTERNAL", "Unexpected server error.");
   }
