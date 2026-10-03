@@ -51,7 +51,7 @@ _CI_RE = re.compile(r"^\s*\S+\s*\[\s*([^,\]]+?)\s*,\s*([^\]]+?)\s*\]\s*$")
 # The exact grid searched by find_best_threshold in 03_evaluation. The CSV stores the
 # threshold rounded to 4 decimals; snapping back to the grid recovers the float the
 # notebook actually compared against.
-_THRESHOLD_GRID = np.arange(0.2, 0.8, 0.01)
+_THRESHOLD_GRID = np.arange(0.05, 0.96, 0.01)
 
 
 def _to_float(raw: str | None) -> float | None:

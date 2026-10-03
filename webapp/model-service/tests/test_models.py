@@ -93,11 +93,19 @@ def test_thresholds_and_benchmarks_from_csv(project):
 
 
 def test_threshold_snaps_to_the_evaluation_grid(project):
-    project.write_comparison({"Class Weights": ROW_A})
+    # 0.84 and 0.11 only exist on the widened grid of 03_evaluation (find_best_threshold: np.arange(0.05, 0.96, 0.01))
+    project.write_comparison(
+        {
+            "Class Weights": ROW_A,
+            "OverSampling": {**ROW_A, "Threshold (Val)": "0.8400"},
+            "Phase 2 (Fine-tuned)": {**ROW_A, "Threshold (Val)": "0.1100"},
+        }
+    )
     _, models = get_models(project.client())
-    grid = np.arange(0.2, 0.8, 0.01)
-    expected = float(grid[np.argmin(np.abs(grid - 0.79))])
-    assert models["class_weights"]["threshold"] == expected
+    grid = np.arange(0.05, 0.96, 0.01)
+    for model_id, value in (("class_weights", 0.79), ("oversampling", 0.84), ("phase2_stage2", 0.11)):
+        expected = float(grid[np.argmin(np.abs(grid - value))])
+        assert models[model_id]["threshold"] == expected
 
 
 @pytest.mark.parametrize("raw", ["abc", "", "1.5", "0", "nan"])
