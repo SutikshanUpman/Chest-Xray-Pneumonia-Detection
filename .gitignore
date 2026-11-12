@@ -26,9 +26,10 @@ webapp/storage/
 node_modules/
 .next/
 webapp/**/.env
-CLAUDE.md
+Agent.md
 *.tsbuildinfo
 # Next.js local env files (frontend/.env.example says to copy it to .env.local)
 .env*.local
 webapp/frontend/next-env.d.ts
 webapp/frontend/AGENTS.md
+webapp/frontend/CLAUDE.md

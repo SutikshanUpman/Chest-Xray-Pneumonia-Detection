@@ -8,6 +8,10 @@
 
 I trained six models to classify chest X-rays as NORMAL or PNEUMONIA, evaluated them honestly on a held-out test set, and served them in a small local web app.
 
+![Chest X-ray website: upload an image and choose models](docs/images/home.png)
+
+*Website preview in mock mode; displayed predictions and heatmaps are simulated.*
+
 **Jump to:** [TL;DR](#tldr) · [What and why](#what-and-why) · [Key findings](#key-findings) · [Struggles and lessons](#struggles-and-lessons) · [Results](#results) · [Demo web app](#demo-web-app) · [Limitations](#limitations) · [Reproduce it](#reproduce-it) · [Disclaimer](#disclaimer)
 
 ---
@@ -173,8 +177,11 @@ xychart-beta
 
 ## Demo web app
 
-<!-- Demo GIF: record a short screen capture of an upload and its results, save it as docs/demo.gif,
-     then replace this comment with: ![Demo](docs/demo.gif) -->
+| Scan results and heatmap viewer | Saved scan history |
+|---|---|
+| [![Scan results and heatmap viewer](docs/images/results.png)](docs/images/results.png) | [![Saved scan history](docs/images/history.png)](docs/images/history.png) |
+
+*Screenshots show the actual website in mock mode, using a sample from the public dataset. Predictions and heatmaps shown are simulated; they are separate from the measured model results above. Click either image to view it at full size.*
 
 A small local web app (`webapp/`): upload one chest X-ray and every available model predicts on it. Each model shows its probability of pneumonia, its own validation-tuned threshold, its label and its inference time; the Phase 2 fine-tuned model also shows a Grad-CAM heatmap over the image. A "Comparative analysis" mode lets you pick models and adds their benchmark numbers from the CSVs. Past scans are saved and listed on a History page. A mock mode returns clearly labelled fake predictions so the website can be developed without TensorFlow.
 
@@ -336,3 +343,19 @@ Chest-Xray-Pneumonia-Detection/
 ## Disclaimer
 
 This project is strictly for educational and research purposes. It is not a medical device and must not be used for real-world medical diagnosis.
+
+
+## What needs to be done
+
+Review date: 12 November 2026. Unchecked items are proposed work, not completed changes.
+
+Portfolio priority: finish first. Keep the current architecture and existing trained models.
+
+- [ ] Extract the upload-to-save workflow in `webapp/api/src/routes/scans.ts` into one named service function; keep request validation and HTTP responses easy to follow.
+- [ ] Preserve preprocessing contracts, mock/real separation, upload validation, error handling and existing tests during any refactor.
+- [ ] Shorten this README by moving detailed experiment lessons into `docs/`; keep the demo, architecture, results and limitations prominent.
+- [ ] Document a portable inference setup using existing model artifacts, separate from training instructions.
+- [ ] After changes, run the relevant existing checks and verify one real-model upload, prediction, heatmap and history flow; record the actual outcome.
+- [ ] Add a short demo recording or screenshots and prepare explanations of preprocessing parity, storage failures and cold starts.
+
+No retraining is required for this finishing scope.
